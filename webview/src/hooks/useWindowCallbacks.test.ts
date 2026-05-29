@@ -1237,5 +1237,78 @@ describe('useWindowCallbacks integration', () => {
         __turnId: 2,
       });
     });
+
+    it('onBlockReset clears streaming refs to prevent cross-turn content merging', () => {
+      vi.stubGlobal('setTimeout', (callback: () => void) => {
+        callback();
+        return 1 as unknown as ReturnType<typeof setTimeout>;
+      });
+      vi.stubGlobal('clearTimeout', vi.fn());
+      vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      });
+      vi.stubGlobal('cancelAnimationFrame', vi.fn());
+
+      const opts = createOptions();
+      renderHook(() => useWindowCallbacks(opts));
+
+      // Start streaming
+      act(() => { window.onStreamStart!(); });
+      expect(opts.isStreamingRef.current).toBe(true);
+
+      // Simulate first turn's thinking delta
+      act(() => { window.onThinkingDelta!('Turn1Thinking'); });
+      expect(opts.streamingThinkingRef.current).toBe('Turn1Thinking');
+
+      // Simulate first turn's content delta
+      act(() => { window.onContentDelta!('Turn1Content'); });
+      expect(opts.streamingContentRef.current).toBe('Turn1Content');
+
+      // Block reset signal arrives (new assistant message in stream)
+      act(() => { window.onBlockReset!(); });
+
+      // Streaming refs should be cleared
+      expect(opts.streamingThinkingRef.current).toBe('');
+      expect(opts.streamingContentRef.current).toBe('');
+
+      // But streaming should still be active
+      expect(opts.isStreamingRef.current).toBe(true);
+
+      // Second turn's deltas arrive - should NOT merge with first turn
+      act(() => { window.onThinkingDelta!('Turn2Thinking'); });
+      expect(opts.streamingThinkingRef.current).toBe('Turn2Thinking');
+
+      act(() => { window.onContentDelta!('Turn2Content'); });
+      expect(opts.streamingContentRef.current).toBe('Turn2Content');
+
+      // If onBlockReset was NOT called, we would have "Turn1ThinkingTurn2Thinking"
+      // and "Turn1ContentTurn2Content" (merged content)
+    });
+
+    it('onBlockReset is ignored when stream is not active', () => {
+      vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      });
+      vi.stubGlobal('cancelAnimationFrame', vi.fn());
+
+      const opts = createOptions();
+      renderHook(() => useWindowCallbacks(opts));
+
+      // Stream is NOT active
+      expect(opts.isStreamingRef.current).toBe(false);
+
+      // Pre-populate refs (simulating stale state)
+      opts.streamingThinkingRef.current = 'StaleThinking';
+      opts.streamingContentRef.current = 'StaleContent';
+
+      // Block reset arrives when stream is not active
+      act(() => { window.onBlockReset!(); });
+
+      // Refs should NOT be cleared (stale signal ignored)
+      expect(opts.streamingThinkingRef.current).toBe('StaleThinking');
+      expect(opts.streamingContentRef.current).toBe('StaleContent');
+    });
   });
 });

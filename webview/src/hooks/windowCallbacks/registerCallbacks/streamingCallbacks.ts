@@ -591,4 +591,32 @@ export function registerStreamingCallbacks(options: UseWindowCallbacksOptions): 
       window.__deniedToolIds!.add(id);
     }
   };
+
+  // Block reset callback — clears streaming content refs when a new assistant
+  // message starts within an ongoing stream (e.g., after tool_use loop iteration).
+  // This prevents cross-turn content merging where new thinking/text deltas
+  // would append to previous turn's buffered content.
+  window.onBlockReset = () => {
+    if (!isStreamingRef.current) {
+      // Stream not active, ignore (could be stale signal after stream ended)
+      return;
+    }
+    // Clear content buffers - new deltas will start fresh
+    streamingContentRef.current = '';
+    streamingThinkingRef.current = '';
+    // Reset throttle timeouts to ensure clean state for new deltas
+    if (contentUpdateTimeoutRef.current != null) {
+      cancelAnimationFrame(contentUpdateTimeoutRef.current);
+      contentUpdateTimeoutRef.current = null;
+    }
+    if (thinkingUpdateTimeoutRef.current != null) {
+      cancelAnimationFrame(thinkingUpdateTimeoutRef.current);
+      thinkingUpdateTimeoutRef.current = null;
+    }
+    // Reset last update timestamps to prevent throttle delays
+    lastContentUpdateRef.current = 0;
+    lastThinkingUpdateRef.current = 0;
+    // Clear auto-expanded thinking keys for the new turn
+    autoExpandedThinkingKeysRef.current.clear();
+  };
 }

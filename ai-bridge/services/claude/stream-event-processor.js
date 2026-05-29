@@ -45,6 +45,13 @@ export function processStreamEvent(msg, turnState) {
     // duplicate this turn's index-0 block (see resetTurnBlockState). Usage still
     // accumulates across turns.
     resetTurnBlockState(turnState);
+    // Emit BLOCK_RESET signal BEFORE any subsequent deltas to ensure frontend
+    // clears its streaming refs (streamingThinkingRef, streamingContentRef).
+    // This prevents new turn's thinking/text from merging with previous turn's content.
+    // Must emit synchronously here, not in the delta handlers, to guarantee ordering.
+    if (turnState.streamingEnabled) {
+      process.stdout.write('[BLOCK_RESET]\n');
+    }
     if (event.message?.usage) {
       turnState.accumulatedUsage = mergeUsage(turnState.accumulatedUsage, event.message.usage);
     }

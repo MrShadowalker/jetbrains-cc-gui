@@ -108,6 +108,9 @@ public class ClaudeMessageHandler implements MessageCallback {
             case "stream_end":
                 handleStreamEnd();
                 break;
+            case "block_reset":
+                handleBlockReset();
+                break;
             case "session_id":
                 handleSessionId(content);
                 break;
@@ -700,6 +703,23 @@ public class ClaudeMessageHandler implements MessageCallback {
         state.setLoading(false);
         state.updateLastModifiedTime();
         callbackHandler.notifyStateChange(state.isBusy(), state.isLoading(), state.getError());
+    }
+
+    /**
+     * Handle block reset signal received during streaming.
+     * This indicates a new assistant message has started within the stream
+     * (e.g., after a tool_use loop iteration). Reset segment state and notify
+     * frontend to clear streaming content refs, preventing cross-turn content merging.
+     */
+    private void handleBlockReset() {
+        LOG.debug("Block reset received - clearing segment state and notifying frontend");
+        // Reset segment activity flags - new blocks start fresh
+        textSegmentActive = false;
+        thinkingSegmentActive = false;
+        // Reset replay deduplicator for the new message's deltas
+        replayDedup.reset();
+        // Notify frontend to clear streaming refs (streamingThinkingRef, streamingContentRef)
+        callbackHandler.notifyBlockReset();
     }
 
     /**
