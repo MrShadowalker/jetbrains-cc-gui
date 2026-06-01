@@ -138,11 +138,35 @@ public class PythonContextCollector {
     }
 
     private static String extractStringLiteralText(PyStringLiteralExpression expression) {
-        StringBuilder value = new StringBuilder();
-        for (PyStringElement element : expression.getStringElements()) {
-            value.append(element.getContent());
+        // Both PyAstStringElement#getContent() (experimental) and getStringValue()
+        // (Marketplace-flagged) are off limits, and the verifier cannot resolve Python
+        // APIs locally (IU bundles no Python plugin). Derive the value from the stable
+        // PsiElement#getText() and strip the Python string prefix/quotes manually.
+        String raw = expression.getText();
+        if (raw == null) {
+            return null;
         }
-        return value.length() > 0 ? value.toString() : null;
+        String content = stripPythonStringLiteral(raw.trim());
+        return content.isEmpty() ? null : content;
+    }
+
+    /**
+     * Strip an optional Python string prefix (r/b/f/u and combinations) and the
+     * surrounding single or triple quotes from a string literal's raw source text.
+     */
+    private static String stripPythonStringLiteral(String text) {
+        int start = 0;
+        while (start < text.length() && "rbfuRBFU".indexOf(text.charAt(start)) >= 0) {
+            start++;
+        }
+        String body = text.substring(start);
+        for (String quote : new String[] {"\"\"\"", "'''", "\"", "'"}) {
+            int len = quote.length();
+            if (body.length() >= 2 * len && body.startsWith(quote) && body.endsWith(quote)) {
+                return body.substring(len, body.length() - len);
+            }
+        }
+        return body;
     }
     
     private static JsonArray getImports(PyFile pyFile) {

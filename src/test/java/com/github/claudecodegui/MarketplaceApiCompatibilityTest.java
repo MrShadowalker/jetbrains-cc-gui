@@ -51,6 +51,7 @@ public class MarketplaceApiCompatibilityTest {
             || code.contains("PluginManager.getPluginByClass(")
             || code.contains("ReadAction.compute(")
             || code.contains(".getOptionValue(\"moduleType\")")
-            || code.contains(".getStringValue()");
+            || code.contains(".getStringValue()")
+            || code.contains(".getModuleTypeName()");
     }
 }
