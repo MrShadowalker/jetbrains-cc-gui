@@ -65,6 +65,7 @@ public class ClaudeChatWindow {
     private volatile boolean disposed = false;
     private volatile boolean initialized = false;
     private volatile boolean frontendReady = false;
+    private volatile String pendingCodeSnippet = null;
     private volatile boolean slashCommandsFetched = false;
     private final AtomicBoolean restoredHistoryLoadStarted = new AtomicBoolean(false);
 
@@ -426,7 +427,23 @@ public class ClaudeChatWindow {
     }
 
     public void addCodeSnippetFromExternal(String selectionInfo) {
-        addCodeSnippet(selectionInfo);
+        if (selectionInfo == null || selectionInfo.isEmpty()) {
+            return;
+        }
+        if (frontendReady) {
+            addCodeSnippet(selectionInfo);
+        } else {
+            // Defer until frontend signals readiness
+            pendingCodeSnippet = selectionInfo;
+        }
+    }
+
+    private void flushPendingCodeSnippet() {
+        if (pendingCodeSnippet != null) {
+            String snippet = pendingCodeSnippet;
+            pendingCodeSnippet = null;
+            addCodeSnippet(snippet);
+        }
     }
 
     public void updateTabStatus(ChatWindowDelegate.TabAnswerStatus status) {
@@ -683,8 +700,24 @@ public class ClaudeChatWindow {
 
     private void addCodeSnippet(String selectionInfo) {
         if (selectionInfo != null && !selectionInfo.isEmpty()) {
+            // Ensure the browser has focus so the frontend can focus the input field
+            if (browser != null) {
+                browser.getComponent().requestFocus();
+            }
             callJavaScript("addCodeSnippet", JsUtils.escapeJs(selectionInfo));
         }
+    }
+
+    /**
+     * Focus the chat input field in the frontend.
+     * Called when Ctrl+Alt+K activates the panel without a selection.
+     */
+    public void focusInputPane() {
+        if (disposed || browser == null) {
+            return;
+        }
+        browser.getComponent().requestFocus();
+        executeJavaScriptCode("window.focusChatInput?.()");
     }
 
     // ==================== Dispose ====================
@@ -841,6 +874,9 @@ public class ClaudeChatWindow {
             @Override
             public void setFrontendReady(boolean ready) {
                 frontendReady = ready;
+                if (ready) {
+                    flushPendingCodeSnippet();
+                }
             }
         };
     }
@@ -970,6 +1006,9 @@ public class ClaudeChatWindow {
             @Override
             public void setFrontendReady(boolean ready) {
                 frontendReady = ready;
+                if (ready) {
+                    flushPendingCodeSnippet();
+                }
             }
 
             @Override
