@@ -25,8 +25,11 @@ public class MessageParser {
         }
 
         // Filter out command messages - only for user messages
-        // Assistant messages may contain these tags in code examples
-        if (shouldFilterCommandMessage(msg, type)) {
+        // Assistant messages may contain these tags in code examples.
+        // Use rawMessage (not msg) so a normalized history envelope, whose "message"
+        // lives under "raw", is inspected the same way as a live SDK message; for live
+        // messages resolveRawMessage returns msg unchanged, so this is a no-op there.
+        if (shouldFilterCommandMessage(rawMessage, type)) {
             return null;
         }
 
