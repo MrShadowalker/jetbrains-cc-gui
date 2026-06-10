@@ -131,16 +131,30 @@ if (process.platform !== 'win32' && !process.env.__AI_BRIDGE_ENV_PROBED) {
 
   let applied = 0;
   if (raw) {
-    const home = process.env.HOME || '';
     for (const entry of raw.split('\0')) {
       const eqIdx = entry.indexOf('=');
       if (eqIdx < 1) continue;
       const key = entry.slice(0, eqIdx);
       if (!VARS_TO_INHERIT.has(key)) continue;
       const val = entry.slice(eqIdx + 1);
-      // Reject a PATH that contains no user-home entries — it's likely a system-only
-      // shell that failed silently and returned a minimal env
-      if (key === 'PATH' && home && !val.includes(home)) continue;
+      if (key === 'PATH') {
+        // Merge rather than replace: the Java launcher already enriched PATH (Homebrew,
+        // nvm, ...), so adopting a login-shell PATH wholesale would drop those entries
+        // whenever the shell returns a minimal one. Union (current first, append only
+        // unseen entries) keeps every launcher path while still picking up dirs the
+        // launcher missed (pyenv/rustup/sdkman). This also fixes Apple-Silicon Homebrew
+        // PATHs, which the old "$HOME must appear" guard wrongly rejected.
+        const current = process.env.PATH || '';
+        const seen = new Set(current.split(path.delimiter).filter(Boolean));
+        const additions = val.split(path.delimiter).filter((p) => p && !seen.has(p));
+        if (additions.length > 0) {
+          process.env.PATH = current
+            ? `${current}${path.delimiter}${additions.join(path.delimiter)}`
+            : val;
+          applied++;
+        }
+        continue;
+      }
       if (val !== process.env[key]) {
         process.env[key] = val;
         applied++;
